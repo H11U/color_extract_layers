@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>色ごと抽出レイヤーツール</title>
+<style>
+  body { font-family: sans-serif; text-align: center; margin: 2em; }
+  input[type="text"] { margin: 0.2em; width: 90px; text-align: center; }
+  canvas { margin: 0.5em; border: 1px solid #ccc; image-rendering: pixelated; }
+  .layer { display: inline-block; margin: 1em; }
+</style>
+</head>
+<body>
+<h2>🎨 色ごと抽出レイヤーツール（ブラウザ版）</h2>
+
+<p>1️⃣ 画像を選択：</p>
+<input type="file" id="fileInput" accept="image/*"><br>
+
+<p>2️⃣ 抽出したいカラーコードを入力（複数OK）</p>
+<div id="colorInputs">
+  <input type="text" value="#FDEBA4">
+  <input type="text" value="#F6D65F">
+  <input type="text" value="#F3B500">
+  <input type="text" value="#987000">
+</div>
+<button id="addColor">＋カラー追加</button><br><br>
+
+<button id="processBtn">画像を抽出</button>
+
+<div id="results"></div>
+
+<script>
+const fileInput = document.getElementById("fileInput");
+const processBtn = document.getElementById("processBtn");
+const addColorBtn = document.getElementById("addColor");
+const colorInputs = document.getElementById("colorInputs");
+const results = document.getElementById("results");
+let img = new Image();
+
+// 画像読み込み
+fileInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => {
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// カラー追加
+addColorBtn.addEventListener("click", () => {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "#000000";
+  colorInputs.appendChild(input);
+});
+
+// HEX → RGB
+function hexToRGB(hex) {
+  hex = hex.replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
+  const bigint = parseInt(hex, 16);
+  return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+}
+
+// 抽出処理
+processBtn.addEventListener("click", () => {
+  if (!img.src) return alert("先に画像を選択してください。");
+  results.innerHTML = "";
+  
+  const tmpCanvas = document.createElement("canvas");
+  const ctx = tmpCanvas.getContext("2d");
+  tmpCanvas.width = img.width;
+  tmpCanvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+  const baseData = ctx.getImageData(0, 0, tmpCanvas.width, tmpCanvas.height);
+
+  const colors = Array.from(colorInputs.querySelectorAll("input")).map(i => i.value);
+
+  colors.forEach(hex => {
+    const [tr, tg, tb] = hexToRGB(hex);
+    const newData = new ImageData(tmpCanvas.width, tmpCanvas.height);
+
+    for (let i = 0; i < baseData.data.length; i += 4) {
+      const [r, g, b, a] = baseData.data.slice(i, i + 4);
+      if (r === tr && g === tg && b === tb && a > 0) {
+        newData.data[i] = r;
+        newData.data[i + 1] = g;
+        newData.data[i + 2] = b;
+        newData.data[i + 3] = 255; // 不透明
+      } else {
+        newData.data[i] = 0;
+        newData.data[i + 1] = 0;
+        newData.data[i + 2] = 0;
+        newData.data[i + 3] = 0; // 透過
+      }
+    }
+
+    // レイヤーCanvas生成
+    const layerCanvas = document.createElement("canvas");
+    const layerCtx = layerCanvas.getContext("2d");
+    layerCanvas.width = img.width;
+    layerCanvas.height = img.height;
+    layerCtx.putImageData(newData, 0, 0);
+
+    // プレビューとDLボタン
+    const div = document.createElement("div");
+    div.className = "layer";
+    div.innerHTML = `<p>${hex}</p>`;
+    div.appendChild(layerCanvas);
+
+    const dl = document.createElement("button");
+    dl.textContent = "💾 ダウンロード";
+    dl.addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.download = `layer_${hex.replace("#","")}.png`;
+      link.href = layerCanvas.toDataURL("image/png");
+      link.click();
+    });
+    div.appendChild(dl);
+    results.appendChild(div);
+  });
+});
+</script>
+</body>
+</html>
